@@ -35,15 +35,33 @@ ch_multiqc_custom_config = params.multiqc_config ? Channel.fromPath(params.multi
 // Don't overwrite global params.modules, create a copy instead and use that within the main script.
 def modules = params.modules.clone()
 
-//
-// MODULE: Local to the pipeline
-//
-include { GET_SOFTWARE_VERSIONS } from '../modules/local/get_software_versions' addParams( options: [publish_files : ['tsv':'']] )
+def publish_genome_options = params.save_reference ? [publish_dir: 'genome'] : [publish_files: false]
+def bwa_mem_options = modules['bwa_mem']
+def skewer_options = modules['skewer']
+def sambamba_merge_options = modules['sambamba_merge']
+def gatk_markduplicates_options = modules['gatk_markduplicates']
+def gatk_baserecalibrator_options = modules['gatk_baserecalibrator']
+def gatk_applybqsr_options = modules['gatk_applybqsr']
+def gatk_haplotypecaller_options = modules['gatk_haplotypecaller']
 
-//
+// MODULE: Local to the pipeline
+include { GET_SOFTWARE_VERSIONS                      } from '../modules/local/get_software_versions' addParams( options: [publish_files : ['tsv':'']] )
+include { SKEWER_TRIMMING                            } from '../modules/local/skewer'                addParams( options: skewer_options )
+include { BWA_MEM                                    } from '../modules/local/bwa'                   addParams( options: bwa_mem_options )
+include { SAMBAMBA_MERGE                             } from '../modules/local/bwa'                   addParams( options: sambamba_merge_options )
+include { MARKDUPLICATES as GATK_MARKDUPLICATES      } from '../modules/local/gatk'                  addParams( options: gatk_markduplicates_options )
+include { BASERECALIBRATOR as GATK_BASERECALIBRATOR  } from '../modules/local/gatk'                  addParams( options: gatk_baserecalibrator_options )
+include { APPLYBQSR as GATK_APPLYBQSR                } from '../modules/local/gatk'                   addParams( options: [publish_files : ['bam':'alignments']] )
+include { HAPLOTYPECALLER  as GATK_HAPLOTYPECALLER   } from '../modules/local/gatk'                  addParams( options: gatk_haplotypecaller_options )
+include { MERGE_VCFS_AND_CALL                        } from '../modules/local/gatk'
+include { INDEX_VCF as INDEX_KNOWN_VCFS              } from '../modules/local/gatk'
+include { INDEX_VCF as INDEX_CHROM_VCFS              } from '../modules/local/gatk'
+include { INDEX_VCF as INDEX_DBSNP_VCFS              } from '../modules/local/gatk'
+include { ANNOTATE as SNPEFF_ANNOTATE                } from '../modules/local/snpeff'
+
 // SUBWORKFLOW: Consisting of a mix of local and nf-core/modules
-//
-include { INPUT_CHECK } from '../subworkflows/local/input_check' addParams( options: [:] )
+include { INPUT_CHECK    } from '../subworkflows/local/input_check'    addParams( options: [:] )
+include { PREPARE_GENOME } from '../subworkflows/local/prepare_genome' addParams( genome_options: publish_genome_options )
 
 /*
 ========================================================================================
@@ -51,14 +69,12 @@ include { INPUT_CHECK } from '../subworkflows/local/input_check' addParams( opti
 ========================================================================================
 */
 
+// MODULE: Installed directly from nf-core/modules
 def multiqc_options   = modules['multiqc']
 multiqc_options.args += params.multiqc_title ? Utils.joinModuleArgs(["--title \"$params.multiqc_title\""]) : ''
-
-//
-// MODULE: Installed directly from nf-core/modules
-//
 include { FASTQC  } from '../modules/nf-core/modules/fastqc/main'  addParams( options: modules['fastqc'] )
 include { MULTIQC } from '../modules/nf-core/modules/multiqc/main' addParams( options: multiqc_options   )
+
 
 /*
 ========================================================================================
@@ -71,26 +87,67 @@ def multiqc_report = []
 
 workflow DNASEQ {
 
+    INPUT_CHECK (ch_input)
+    INPUT_CHECK.out.reads | FASTQC
+    INPUT_CHECK.out.reads | SKEWER_TRIMMING
+
+    PREPARE_GENOME()
+
+    // Map all reads to the genome
+    BWA_MEM ( SKEWER_TRIMMING.out.reads, PREPARE_GENOME.out.bwa_index ).bam \
+    | map { meta, bam -> [[id:meta.sample], bam] } \
+    | groupTuple() \
+    | SAMBAMBA_MERGE \
+    | GATK_MARKDUPLICATES
+
+    // If the user supplies vcf files of known variants,
+    // use these variants to recalibrate the mapping.
+    if(params.known_variants) {
+        Channel.from ( params.known_variants.split(",").collect { path -> file(path) } ) \
+        | map { [ [id: it.getBaseName() ], it] } \
+        | INDEX_KNOWN_VCFS
+
+        GATK_MARKDUPLICATES.out.bams \
+        | combine ( INDEX_KNOWN_VCFS.out.indexed_vcfs ) \
+        | combine ( PREPARE_GENOME.out.indexed_fasta ) \
+        | GATK_BASERECALIBRATOR
+
+        ChBamsForGenotyping = GATK_APPLYBQSR ( GATK_BASERECALIBRATOR.out.all ).bams
+    } else {
+        ChBamsForGenotyping = MARK_DUPLICATES.out.bams
+    }
+
+    ChBamsForGenotyping \
+    | combine ( PREPARE_GENOME.out.fasta_records ) \
+    | combine ( PREPARE_GENOME.out.indexed_fasta ) \
+    | GATK_HAPLOTYPECALLER
+
+    INDEX_CHROM_VCFS ( GATK_HAPLOTYPECALLER.out.vcfs )
+
+    INDEX_CHROM_VCFS.out.indexed_vcfs \
+    | map { meta, vcf, tbi -> [[id: meta.id], vcf, tbi]} \
+    | groupTuple() \
+    | set { ChSampleVCFs }
+
+    MERGE_VCFS_AND_CALL ( ChSampleVCFs, PREPARE_GENOME.out.indexed_fasta )
+
+    Channel.fromPath(params.dbsnp) \
+    | map { path -> [[id:'dbsnp'], path]} \
+    | INDEX_DBSNP_VCFS
+
+    MERGE_VCFS_AND_CALL.out \
+    | combine ( INDEX_DBSNP_VCFS.out.indexed_vcfs_nometa ) \
+    | SNPEFF_ANNOTATE
+
     ch_software_versions = Channel.empty()
-
-    //
-    // SUBWORKFLOW: Read in samplesheet, validate and stage input files
-    //
-    INPUT_CHECK (
-        ch_input
+    ch_software_versions = ch_software_versions.mix(
+        FASTQC.out.versions.first().ifEmpty(null),
+        SKEWER_TRIMMING.out.versions.first().ifEmpty(null),
+        BWA_MEM.out.versions.first().ifEmpty(null),
+        GATK_BASERECALIBRATOR.out.versions.first().ifEmpty(null),
     )
 
-    //
-    // MODULE: Run FastQC
-    //
-    FASTQC (
-        INPUT_CHECK.out.reads
-    )
-    ch_software_versions = ch_software_versions.mix(FASTQC.out.version.first().ifEmpty(null))
-
-    //
     // MODULE: Pipeline reporting
-    //
     ch_software_versions
         .map { it -> if (it) [ it.baseName, it ] }
         .groupTuple()
@@ -99,13 +156,9 @@ workflow DNASEQ {
         .collect()
         .set { ch_software_versions }
 
-    GET_SOFTWARE_VERSIONS (
-        ch_software_versions.map { it }.collect()
-    )
+    GET_SOFTWARE_VERSIONS ( ch_software_versions.map { it }.collect() )
 
-    //
     // MODULE: MultiQC
-    //
     workflow_summary    = WorkflowDnaseq.paramsSummaryMultiqc(workflow, summary_params)
     ch_workflow_summary = Channel.value(workflow_summary)
 
@@ -116,11 +169,9 @@ workflow DNASEQ {
     ch_multiqc_files = ch_multiqc_files.mix(GET_SOFTWARE_VERSIONS.out.yaml.collect())
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}.ifEmpty([]))
 
-    MULTIQC (
-        ch_multiqc_files.collect()
-    )
+    MULTIQC (ch_multiqc_files.collect())
     multiqc_report       = MULTIQC.out.report.toList()
-    ch_software_versions = ch_software_versions.mix(MULTIQC.out.version.ifEmpty(null))
+    ch_software_versions = ch_software_versions.mix(MULTIQC.out.versions.ifEmpty(null))
 }
 
 /*

@@ -241,28 +241,20 @@ class NfcoreTemplate {
         return colorcodes
     }
 
-    //
-    // Does what is says on the tin
-    //
     public static String dashedLine(monochrome_logs) {
         Map colors = logColours(monochrome_logs)
-        return "-${colors.dim}----------------------------------------------------${colors.reset}-"
+        return "-${colors.dim}--------------------------${colors.reset}-"
     }
 
-    //
-    // nf-core logo
-    //
     public static String logo(workflow, monochrome_logs) {
         Map colors = logColours(monochrome_logs)
         String.format(
             """\n
             ${dashedLine(monochrome_logs)}
-                                                    ${colors.green},--.${colors.black}/${colors.green},-.${colors.reset}
-            ${colors.blue}        ___     __   __   __   ___     ${colors.green}/,-._.--~\'${colors.reset}
-            ${colors.blue}  |\\ | |__  __ /  ` /  \\ |__) |__         ${colors.yellow}}  {${colors.reset}
-            ${colors.blue}  | \\| |       \\__, \\__/ |  \\ |___     ${colors.green}\\`-._,-`-,${colors.reset}
-                                                    ${colors.green}`._,._,\'${colors.reset}
-            ${colors.purple}  ${workflow.manifest.name} v${workflow.manifest.version}${colors.reset}
+                ${colors.blue}╔═╗${colors.reset}┌─┐┌┐┌${colors.blue}╔══════════╗${colors.reset}
+                ${colors.blue}║ ╦${colors.reset}├┤ │││${colors.blue}╠╣ ${colors.reset}┬  ┌─┐┬ ┬
+                ${colors.blue}╚═╝${colors.reset}└─┘┘└┘${colors.blue}╚  ${colors.reset}┴─┘└─┘└┴┘
+             ${colors.purple}${workflow.manifest.name} v${workflow.manifest.version}${colors.reset}
             ${dashedLine(monochrome_logs)}
             """.stripIndent()
         )

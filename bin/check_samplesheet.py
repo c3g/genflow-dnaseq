@@ -52,26 +52,25 @@ def check_samplesheet(file_in, file_out):
     https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/samplesheet/samplesheet_test_illumina_amplicon.csv
     """
 
-    sample_mapping_dict = {}
+    id_mapping_dict = {}
     with open(file_in, "r") as fin:
 
         ## Check header
         MIN_COLS = 2
-        # TODO nf-core: Update the column names for the input samplesheet
-        HEADER = ["sample", "fastq_1", "fastq_2"]
-        header = [x.strip('"') for x in fin.readline().strip().split(",")]
+        HEADER = ["Sample", "Readset", "Library", "RunType", "Run", "Lane", "Adapter1", "Adapter2", "QualityOffset", "BED", "FASTQ1", "FASTQ2", "BAM"]
+        header = [x.strip('"') for x in fin.readline().strip().split("\t")]
         if header[: len(HEADER)] != HEADER:
             print("ERROR: Please check samplesheet header -> {} != {}".format(",".join(header), ",".join(HEADER)))
             sys.exit(1)
 
         ## Check sample entries
         for line in fin:
-            lspl = [x.strip().strip('"') for x in line.strip().split(",")]
+            lspl = [x.strip().strip('"') for x in line.strip('\n').split("\t")]
 
             # Check valid number of columns per row
             if len(lspl) < len(HEADER):
                 print_error(
-                    "Invalid number of columns (minimum = {})!".format(len(HEADER)),
+                    "Invalid number of columns (minimum = {} but found {})!".format(len(HEADER), len(lspl)),
                     "Line",
                     line,
                 )
@@ -84,9 +83,9 @@ def check_samplesheet(file_in, file_out):
                 )
 
             ## Check sample name entries
-            sample, fastq_1, fastq_2 = lspl[: len(HEADER)]
-            sample = sample.replace(" ", "_")
-            if not sample:
+            sample, id, library, runtype, run, lane, adapter1, adapter2, qualityoffset, bed, fastq_1, fastq_2, bam = lspl[: len(HEADER)]
+            id = id.replace(" ", "_")
+            if not id:
                 print_error("Sample entry has not been specified!", "Line", line)
 
             ## Check FastQ file extension
@@ -102,37 +101,37 @@ def check_samplesheet(file_in, file_out):
                         )
 
             ## Auto-detect paired-end/single-end
-            sample_info = []  ## [single_end, fastq_1, fastq_2]
-            if sample and fastq_1 and fastq_2:  ## Paired-end short reads
-                sample_info = ["0", fastq_1, fastq_2]
-            elif sample and fastq_1 and not fastq_2:  ## Single-end short reads
-                sample_info = ["1", fastq_1, fastq_2]
+            sample_info = []  ## [single_end, sample, library, runtype, run, lane, adapter1, adapter2, qualityoffset, bed, fastq_1, fastq_2]
+            if id and fastq_1 and fastq_2:  ## Paired-end short reads
+                sample_info = ["0", sample, id, library, runtype, run, lane, adapter1, adapter2, qualityoffset, bed, fastq_1, fastq_2]
+            elif id and fastq_1 and not fastq_2:  ## Single-end short reads
+                sample_info = ["1", sample, id, library, runtype, run, lane, adapter1, adapter2, qualityoffset, bed, fastq_1]
             else:
                 print_error("Invalid combination of columns provided!", "Line", line)
 
             ## Create sample mapping dictionary = { sample: [ single_end, fastq_1, fastq_2 ] }
-            if sample not in sample_mapping_dict:
-                sample_mapping_dict[sample] = [sample_info]
+            if id not in id_mapping_dict:
+                id_mapping_dict[id] = [sample_info]
             else:
-                if sample_info in sample_mapping_dict[sample]:
+                if sample_info in id_mapping_dict[id]:
                     print_error("Samplesheet contains duplicate rows!", "Line", line)
                 else:
-                    sample_mapping_dict[sample].append(sample_info)
+                    id_mapping_dict[id].append(sample_info)
 
     ## Write validated samplesheet with appropriate columns
-    if len(sample_mapping_dict) > 0:
+    if len(id_mapping_dict) > 0:
         out_dir = os.path.dirname(file_out)
         make_dir(out_dir)
         with open(file_out, "w") as fout:
-            fout.write(",".join(["sample", "single_end", "fastq_1", "fastq_2"]) + "\n")
-            for sample in sorted(sample_mapping_dict.keys()):
+            fout.write(",".join(["id", "single_end", "sample", "readset", "library", "runtype", "run", "lane", "adapter1", "adapter2", "qualityoffset", "bed", "fastq_1", "fastq_2"]) + "\n")
+            for id in sorted(id_mapping_dict.keys()):
 
                 ## Check that multiple runs of the same sample are of the same datatype
-                if not all(x[0] == sample_mapping_dict[sample][0][0] for x in sample_mapping_dict[sample]):
-                    print_error("Multiple runs of a sample must be of the same datatype!", "Sample: {}".format(sample))
+                if not all(x[0] == id_mapping_dict[id][0][0] for x in id_mapping_dict[id]):
+                    print_error("Multiple runs of a sample must be of the same datatype!", "ID: {}".format(id))
 
-                for idx, val in enumerate(sample_mapping_dict[sample]):
-                    fout.write(",".join(["{}_T{}".format(sample, idx + 1)] + val) + "\n")
+                for idx, val in enumerate(id_mapping_dict[id]):
+                    fout.write(",".join(["{}_T{}".format(id, idx + 1)] + val) + "\n")
     else:
         print_error("No entries to process!", "Samplesheet: {}".format(file_in))
 

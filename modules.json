@@ -3,11 +3,17 @@
     "homePage": "https://github.com/nf-core/dnaseq",
     "repos": {
         "nf-core/modules": {
+            "bwa/index": {
+                "git_sha": "49da8642876ae4d91128168cd0db4f1c858d7792"
+            },
             "fastqc": {
-                "git_sha": "e937c7950af70930d1f34bb961403d9d2aa81c7d"
+                "git_sha": "49da8642876ae4d91128168cd0db4f1c858d7792"
+            },
+            "gunzip": {
+                "git_sha": "49da8642876ae4d91128168cd0db4f1c858d7792"
             },
             "multiqc": {
-                "git_sha": "e937c7950af70930d1f34bb961403d9d2aa81c7d"
+                "git_sha": "49da8642876ae4d91128168cd0db4f1c858d7792"
             }
         }
     }

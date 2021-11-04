@@ -1,0 +1,2 @@
+Sample	Readset	Library	RunType	Run	Lane	Adapter1	Adapter2	QualityOffset	BED	FASTQ1	FASTQ2	BAM
+dnaseq_GM12878_chr19	dnaseq_GM12878_dup01	1	PAIRED_END	1	1	AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC	AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT	33		https://datahub-554-cv3.p.genap.ca/dnaseq/dnaseq_GM12878_chr19_R1.fastq.gz	https://datahub-554-cv3.p.genap.ca/dnaseq/dnaseq_GM12878_chr19_R2.fastq.gz	f

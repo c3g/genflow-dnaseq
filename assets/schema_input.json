@@ -7,17 +7,27 @@
     "items": {
         "type": "object",
         "properties": {
-            "sample": {
+            "Sample": {
                 "type": "string",
                 "pattern": "^\\S+$",
                 "errorMessage": "Sample name must be provided and cannot contain spaces"
             },
-            "fastq_1": {
+            "Readset": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Readset name must be provided and cannot contain spaces"
+            },
+            "RunType": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "RunType must be either 'PAIRED_END' or 'SINGLE_END'"
+            },
+            "FASTQ1": {
                 "type": "string",
                 "pattern": "^\\S+\\.f(ast)?q\\.gz$",
                 "errorMessage": "FastQ file for reads 1 must be provided, cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
             },
-            "fastq_2": {
+            "FASTQ2": {
                 "errorMessage": "FastQ file for reads 2 cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'",
                 "anyOf": [
                     {
@@ -33,7 +43,8 @@
         },
         "required": [
             "sample",
-            "fastq_1"
+            "Readset",
+            "FASTQ1"
         ]
     }
 }

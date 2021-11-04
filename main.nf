@@ -18,6 +18,7 @@ nextflow.enable.dsl = 2
 */
 
 params.fasta = WorkflowMain.getGenomeAttribute(params, 'fasta')
+params.bwa   = WorkflowMain.getGenomeAttribute(params, 'bwa')
 
 /*
 ========================================================================================
@@ -38,7 +39,7 @@ include { DNASEQ } from './workflows/dnaseq'
 //
 // WORKFLOW: Run main nf-core/dnaseq analysis pipeline
 //
-workflow NFCORE_DNASEQ {
+workflow GF_DNASEQ {
     DNASEQ ()
 }
 
@@ -53,7 +54,7 @@ workflow NFCORE_DNASEQ {
 // See: https://github.com/nf-core/rnaseq/issues/619
 //
 workflow {
-    NFCORE_DNASEQ ()
+    GF_DNASEQ ()
 }
 
 /*

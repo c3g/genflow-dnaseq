@@ -4,35 +4,38 @@ include { initOptions; saveFiles; getSoftwareName; getProcessName } from './func
 params.options = [:]
 options        = initOptions(params.options)
 
-process MULTIQC {
-    label 'process_medium'
+process GUNZIP {
+    tag "$archive"
+    label 'process_low'
     publishDir "${params.outdir}",
         mode: params.publish_dir_mode,
         saveAs: { filename -> saveFiles(filename:filename, options:params.options, publish_dir:getSoftwareName(task.process), meta:[:], publish_by_meta:[]) }
 
-    conda (params.enable_conda ? 'bioconda::multiqc=1.11' : null)
+    conda (params.enable_conda ? "conda-forge::sed=4.7" : null)
     if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
-        container "https://depot.galaxyproject.org/singularity/multiqc:1.11--pyhdfd78af_0"
+        container "https://containers.biocontainers.pro/s3/SingImgsRepo/biocontainers/v1.2.0_cv1/biocontainers_v1.2.0_cv1.img"
     } else {
-        container "quay.io/biocontainers/multiqc:1.11--pyhdfd78af_0"
+        container "biocontainers/biocontainers:v1.2.0_cv1"
     }
 
     input:
-    path multiqc_files
+    path archive
 
     output:
-    path "*multiqc_report.html", emit: report
-    path "*_data"              , emit: data
-    path "*_plots"             , optional:true, emit: plots
-    path "versions.yml"        , emit: versions
+    path "$gunzip",       emit: gunzip
+    path "versions.yml" , emit: versions
 
     script:
+    gunzip       = archive.toString() - '.gz'
     """
-    multiqc -f $options.args .
+    gunzip \\
+        -f \\
+        $options.args \\
+        $archive
 
     cat <<-END_VERSIONS > versions.yml
     ${getProcessName(task.process)}:
-        ${getSoftwareName(task.process)}: \$( multiqc --version | sed -e "s/multiqc, version //g" )
+        ${getSoftwareName(task.process)}: \$(echo \$(gunzip --version 2>&1) | sed 's/^.*(gzip) //; s/ Copyright.*\$//')
     END_VERSIONS
     """
 }
